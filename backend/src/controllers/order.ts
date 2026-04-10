@@ -1,16 +1,17 @@
 import { NextFunction, Request, Response } from 'express';
 import { nanoid } from 'nanoid';
-import { Types, Error as MongooseError } from 'mongoose';
-import Product from '../models/product';
+import { Types } from 'mongoose';
+import { Product, IProduct } from '../models/product';
 import NotFoundError from '../errors/not-found-error';
 import BadRequestError from '../errors/bad-request-error';
+import HttpCodes from '../errors/codes';
 
 const createOrder = async (req: Request, res: Response, next: NextFunction) => {
   const { items, total } = req.body;
 
   const ids = items.map((id: string) => new Types.ObjectId(id));
 
-  Product.find({ _id: { $in: ids } })
+  Product.find<IProduct>({ _id: { $in: ids } })
     .then((products) => {
       if (new Set(items).size !== items.length) {
         return next(new BadRequestError('В заказе есть дубликаты одного или нескольких товаров'));
@@ -33,16 +34,10 @@ const createOrder = async (req: Request, res: Response, next: NextFunction) => {
         return next(new BadRequestError('Сумма заказа не совпадает с суммарной стоимостью товаров'));
       }
 
-      const id = nanoid();
-      return res.status(201).send({ total, id });
+      return res.status(HttpCodes.OK).send({ total, id: nanoid() });
     })
 
-    .catch((err) => {
-      if (err instanceof MongooseError.ValidationError) {
-        return next(new BadRequestError(err.message));
-      }
-      return next(err);
-    });
+    .catch((err) => next(err));
 };
 
 export default createOrder;
