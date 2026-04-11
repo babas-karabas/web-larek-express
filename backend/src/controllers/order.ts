@@ -9,35 +9,36 @@ import HttpCodes from '../errors/codes';
 const createOrder = async (req: Request, res: Response, next: NextFunction) => {
   const { items, total } = req.body;
 
+  if (new Set(items).size !== items.length) {
+    return next(new BadRequestError('В заказе есть дубликаты одного или нескольких товаров'));
+  }
+
   const ids = items.map((id: string) => new Types.ObjectId(id));
 
-  Product.find<IProduct>({ _id: { $in: ids } })
-    .then((products) => {
-      if (new Set(items).size !== items.length) {
-        return next(new BadRequestError('В заказе есть дубликаты одного или нескольких товаров'));
-      }
+  try {
+    const products = await Product.find<IProduct>({ _id: { $in: ids } });
+    if (!products) {
+      return next(new NotFoundError('Товары не найдены'));
+    }
 
-      if (!products) {
-        return next(new NotFoundError('Товары не найдены'));
-      }
+    if (products.length !== items.length) {
+      return next(new NotFoundError('Некоторые товары не найдены'));
+    }
 
-      if (products.length !== items.length) {
-        return next(new NotFoundError('Некоторые товары не найдены'));
-      }
-      if (products.some((p) => p.price === null)) {
-        return next(new BadRequestError('Один или несколько товаров не продаются'));
-      }
+    if (products.some((p) => p.price === null)) {
+      return next(new BadRequestError('Один или несколько товаров не продаются'));
+    }
 
-      const calculatedTotal = products.reduce((sum, p) => sum + p.price, 0);
+    const calculatedTotal = products.reduce((sum, p) => sum + p.price, 0);
 
-      if (calculatedTotal !== total) {
-        return next(new BadRequestError('Сумма заказа не совпадает с суммарной стоимостью товаров'));
-      }
+    if (calculatedTotal !== total) {
+      return next(new BadRequestError('Сумма заказа не совпадает с суммарной стоимостью товаров'));
+    }
 
-      return res.status(HttpCodes.OK).send({ total, id: nanoid() });
-    })
-
-    .catch((err) => next(err));
+    return res.status(HttpCodes.OK).send({ total, id: nanoid() });
+  } catch (err) {
+    return next(err);
+  }
 };
 
 export default createOrder;
